@@ -80,6 +80,7 @@ OPTIONS:
 	if verbose {
 		log.Print("Verbose logging enabled.")
 	}
+		raft.SetLogLevel(raft.Trace)
 	if trace {
 		raft.SetLogLevel(raft.Trace)
 		log.Print("Raft trace debugging enabled.")
