@@ -30,6 +30,7 @@ if [ -z "${CTF_BUILD_ENV}" ]; then
 else
     export GOPATH="$cwd/.build:$GOPATH"
 fi
+echo $GOPATH
 
 echo "Fetching sqlcluster dependencies..."
 go get github.com/goraft/raft
