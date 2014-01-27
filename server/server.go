@@ -61,9 +61,7 @@ func (s *Server) ListenAndServe(leader string) error {
 
     // Initialize and start Raft server.
     transporter := raft.NewHTTPTransporter("/raft")
-    fmt.Printf("Transporter: %#v\n", &transporter.Transport.Dial)
     transporter.Transport.Dial = transport.UnixDialer
-    fmt.Printf("Transporter: %#v\n",&transporter.Transport.Dial)
     s.raftServer, err = raft.NewServer(s.name, s.path, transporter, nil, s.sql, "")
     if err != nil {
         log.Fatal(err)
@@ -84,6 +82,7 @@ func (s *Server) ListenAndServe(leader string) error {
         if err := s.Join(leader); err != nil {
             log.Fatal(err)
         }
+        log.Printf("Joined to leader: ", leader)
 
     } else if s.raftServer.IsLogEmpty() {
         // Initialize the server by joining itself.
@@ -99,6 +98,7 @@ func (s *Server) ListenAndServe(leader string) error {
         if err != nil {
             log.Fatal(err)
         }
+        log.Printf("Created a leader: ", leader)
 
     } else {
         log.Println("Recovered from log")
@@ -165,16 +165,12 @@ func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
-    log.Printf("Handling join request: %#v", command)
-    log.Printf("%s body", command)
-    log.Printf("1")
+    log.Printf("Handling join request: %#v", command.ConnectionString)
     if _, err := s.raftServer.Do(command); err != nil {
-        log.Printf("2")
         log.Printf("%s err", err)
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
-        log.Printf("3")
     log.Printf("%s count", s.raftServer.MemberCount())
 	b := util.JSONEncode("")
     w.Write(b.Bytes())
@@ -207,15 +203,23 @@ func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
 // This is the only user-facing function, and accordingly the body is
 // a raw string rather than JSON.
 func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
+    log.Printf("Received an sql query")
+    if s.raftServer.MemberCount() < 3 {
+            http.Error(w, "not ready yet", http.StatusBadRequest)
+        return
+    }
 	state := s.raftServer.State()
-    log.Printf("Leader is %s", s.raftServer.Leader())
-	if state != "leader" {
-        leader := s.raftServer.Leader()
-        if leader == "" {
-            http.Error(w, "sorry", http.StatusBadRequest)
-            return
-        }
-        cs, err := transport.Encode(s.raftServer.Leader())
+
+    leaderPeer, ok := s.raftServer.Peers()[s.raftServer.Leader()]
+
+    if ok {
+        log.Printf("Error while getting leader")
+            http.Error(w, "not ready yet", http.StatusBadRequest)
+        return
+    }
+
+	if state != "leader" && leaderPeer != nil {
+        cs, err := transport.Encode(leaderPeer.ConnectionString)
         if err != nil || cs == ""  {
             log.Printf("Error, transport.encode")
             http.Error(w, "sorry", http.StatusBadRequest)
