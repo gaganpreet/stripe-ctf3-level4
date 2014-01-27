@@ -7,6 +7,7 @@ import (
 	"stripe-ctf.com/sqlcluster/log"
 	"sync"
 	"syscall"
+//    "io/ioutil"
 )
 
 type SQL struct {
@@ -42,14 +43,14 @@ func getExitstatus(err error) int {
 	return status.ExitStatus()
 }
 
-func (sql *SQL) Execute(tag string, command string) (*Output, error) {
+func (sql *SQL) Execute(command string) (*Output, error) {
 	// TODO: make sure I can catch non-lock issuez
 	sql.mutex.Lock()
 	defer sql.mutex.Unlock()
 
 	defer func() { sql.sequenceNumber += 1 }()
-	if tag == "primary" || log.Verbose() {
-		log.Printf("[%s] [%d] Executing %#v", tag, sql.sequenceNumber, command)
+	if log.Verbose() {
+		log.Printf("[%d] Executing %#v", sql.sequenceNumber, command)
 	}
 
 	subprocess := exec.Command("sqlite3", sql.path)

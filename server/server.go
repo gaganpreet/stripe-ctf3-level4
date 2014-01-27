@@ -11,7 +11,11 @@ import (
 	"stripe-ctf.com/sqlcluster/sql"
 	"stripe-ctf.com/sqlcluster/transport"
 	"stripe-ctf.com/sqlcluster/util"
-	"time"
+	"stripe-ctf.com/sqlcluster/command"
+    "github.com/goraft/raft"
+    "bytes"
+    "encoding/json"
+    "time"
 )
 
 type Server struct {
@@ -23,24 +27,7 @@ type Server struct {
 	sql        *sql.SQL
 	client     *transport.Client
 	cluster    *Cluster
-}
-
-type Join struct {
-	Self ServerAddress `json:"self"`
-}
-
-type JoinResponse struct {
-	Self    ServerAddress   `json:"self"`
-	Members []ServerAddress `json:"members"`
-}
-
-type Replicate struct {
-	Self  ServerAddress `json:"self"`
-	Query []byte        `json:"query"`
-}
-
-type ReplicateResponse struct {
-	Self ServerAddress `json:"self"`
+    raftServer raft.Server
 }
 
 // Creates a new server.
@@ -61,40 +48,68 @@ func New(path, listen string) (*Server, error) {
 		client:  transport.NewClient(),
 		cluster: NewCluster(path, cs),
 	}
+    s.name = listen
 
 	return s, nil
 }
 
 // Starts the server.
-func (s *Server) ListenAndServe(primary string) error {
-	var err error
+func (s *Server) ListenAndServe(leader string) error {
+    var err error
+
+    log.Printf("Initializing Raft Server: %s", s.path)
+
+    // Initialize and start Raft server.
+    transporter := raft.NewHTTPTransporter("/raft")
+    fmt.Printf("Transporter: %#v\n", &transporter.Transport.Dial)
+    transporter.Transport.Dial = transport.UnixDialer
+    fmt.Printf("Transporter: %#v\n",&transporter.Transport.Dial)
+    s.raftServer, err = raft.NewServer(s.name, s.path, transporter, nil, s.sql, "")
+    if err != nil {
+        log.Fatal(err)
+    }
+    transporter.Install(s.raftServer, s)
+    s.raftServer.SetTransporter(transporter)
+    s.raftServer.Start()
+
+    log.Println("<<<%s>>>", s.raftServer.LogPath())
+    if leader != "" {
+        // Join to leader if specified.
+
+        log.Println("Attempting to join leader:", leader)
+
+        if !s.raftServer.IsLogEmpty() {
+            log.Fatal("Cannot join with an existing log")
+        }
+        if err := s.Join(leader); err != nil {
+            log.Fatal(err)
+        }
+
+    } else if s.raftServer.IsLogEmpty() {
+        // Initialize the server by joining itself.
+
+        log.Println("Initializing new cluster")
+
+        cs, err := transport.Encode(s.path + "/" + s.listen)
+
+        _, err = s.raftServer.Do(&raft.DefaultJoinCommand{
+            Name:             s.raftServer.Name(),
+            ConnectionString: cs,
+        })
+        if err != nil {
+            log.Fatal(err)
+        }
+
+    } else {
+        log.Println("Recovered from log")
+    }
+
 	// Initialize and start HTTP server.
 	s.httpServer = &http.Server{
 		Handler: s.router,
 	}
 
-	if primary == "" {
-		s.cluster.Init()
-	} else {
-		s.Join(primary)
-		go func() {
-			for {
-				if s.healthcheckPrimary() {
-					time.Sleep(10 * time.Millisecond)
-					continue
-				}
-
-				s.cluster.PerformFailover()
-
-				if s.cluster.State() == "primary" {
-					break
-				}
-			}
-		}()
-	}
-
 	s.router.HandleFunc("/sql", s.sqlHandler).Methods("POST")
-	s.router.HandleFunc("/replicate", s.replicationHandler).Methods("POST")
 	s.router.HandleFunc("/healthcheck", s.healthcheckHandler).Methods("GET")
 	s.router.HandleFunc("/join", s.joinHandler).Methods("POST")
 
@@ -106,49 +121,65 @@ func (s *Server) ListenAndServe(primary string) error {
 	return s.httpServer.Serve(l)
 }
 
-// Client operations
-
-func (s *Server) healthcheckPrimary() bool {
-	_, err := s.client.SafeGet(s.cluster.primary.ConnectionString, "/healthcheck")
-
-	if err != nil {
-		log.Printf("The primary appears to be down: %s", err)
-		return false
-	} else {
-		return true
-	}
+func (s *Server) HandleFunc(pattern string, handler func(http.ResponseWriter, *http.Request)) {
+    s.router.HandleFunc(pattern, handler)
 }
 
-// Join an existing cluster
-func (s *Server) Join(primary string) error {
-	join := &Join{Self: s.cluster.self}
-	b := util.JSONEncode(join)
+// Client operations
 
-	cs, err := transport.Encode(primary)
-	if err != nil {
-		return err
-	}
+// Join an existing cluster
+func (s *Server) Join(leader string) error {
+    cs, _ := transport.Encode(s.path + "/" + s.listen)
+    command := &raft.DefaultJoinCommand{
+        Name:             s.raftServer.Name(),
+        ConnectionString: /*s.path+ "/" +*/ cs,
+    }
+    var b bytes.Buffer
+    json.NewEncoder(&b).Encode(command)
+
 
 	for {
-		body, err := s.client.SafePost(cs, "/join", b)
+        log.Printf(">>>>>>>>>>INITIATING JOIN REQUEST to %s from %s<<<<<<<<<<,", leader, s.listen)
+        cs, err := transport.Encode(leader)
+        if err != nil {
+            log.Printf("Error, transport.encode")
+            return err
+        }
+		_, err = s.client.SafePost(cs, "/join", &b)
 		if err != nil {
 			log.Printf("Unable to join cluster: %s", err)
 			time.Sleep(1 * time.Second)
 			continue
 		}
-
-		resp := &JoinResponse{}
-		if err = util.JSONDecode(body, &resp); err != nil {
-			return err
-		}
-
-		s.cluster.Join(resp.Self, resp.Members)
-		return nil
+        log.Printf("Member count: ", s.raftServer.MemberCount())
+        return nil
 	}
 }
 
 // Server handlers
 func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
+    command := &raft.DefaultJoinCommand{}
+
+    log.Printf("Handling join request: %#v", req.Body)
+    if err := json.NewDecoder(req.Body).Decode(&command); err != nil {
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+    log.Printf("Handling join request: %#v", command)
+    log.Printf("%s body", command)
+    log.Printf("1")
+    if _, err := s.raftServer.Do(command); err != nil {
+        log.Printf("2")
+        log.Printf("%s err", err)
+        http.Error(w, err.Error(), http.StatusInternalServerError)
+        return
+    }
+        log.Printf("3")
+    log.Printf("%s count", s.raftServer.MemberCount())
+	b := util.JSONEncode("")
+    w.Write(b.Bytes())
+
+/*
 	j := &Join{}
 	if err := util.JSONDecode(req.Body, j); err != nil {
 		log.Printf("Invalid join request: %s", err)
@@ -170,14 +201,37 @@ func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
 	}
 	b := util.JSONEncode(resp)
 	w.Write(b.Bytes())
+*/
 }
 
 // This is the only user-facing function, and accordingly the body is
 // a raw string rather than JSON.
 func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
-	state := s.cluster.State()
-	if state != "primary" {
-		http.Error(w, "Only the primary can service queries, but this is a "+state, http.StatusBadRequest)
+	state := s.raftServer.State()
+    log.Printf("Leader is %s", s.raftServer.Leader())
+	if state != "leader" {
+        leader := s.raftServer.Leader()
+        if leader == "" {
+            http.Error(w, "sorry", http.StatusBadRequest)
+            return
+        }
+        cs, err := transport.Encode(s.raftServer.Leader())
+        if err != nil || cs == ""  {
+            log.Printf("Error, transport.encode")
+            http.Error(w, "sorry", http.StatusBadRequest)
+            return
+        }
+        buf := new(bytes.Buffer)
+        log.Printf(cs)
+        body, err := s.client.SafePost(cs, "/sql", req.Body)
+        if body != nil {
+            buf.ReadFrom(body)
+            s := buf.String()
+            byteArray := []byte(s)
+            w.Write(byteArray)
+        } else {
+            http.Error(w, "sorry", http.StatusBadRequest)
+        }
 		return
 	}
 
@@ -188,47 +242,29 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
 	}
 
 	log.Debugf("[%s] Received query: %#v", s.cluster.State(), string(query))
+    output_t, err := s.raftServer.Do(command.NewWriteCommand(query))
+
+
+    log.Printf(">>>>>>>>>>> %s %s", err, s.raftServer.State())
+
+    if output_t == nil {
+        http.Error(w, "sorry", http.StatusBadRequest)
+        return
+    }
+    output := output_t.(*sql.Output)
+    formatted := fmt.Sprintf("SequenceNumber: %d\n%s",
+    output.SequenceNumber, output.Stdout)
+
+	w.Write([]byte(formatted))
+    /*
 	resp, err := s.execute(query)
 	if err != nil {
 		http.Error(w, err.Error(), http.StatusBadRequest)
 	}
 
-	r := &Replicate{
-		Self:  s.cluster.self,
-		Query: query,
-	}
-	for _, member := range s.cluster.members {
-		b := util.JSONEncode(r)
-		_, err := s.client.SafePost(member.ConnectionString, "/replicate", b)
-		if err != nil {
-			log.Printf("Couldn't replicate query to %v: %s", member, err)
-		}
-	}
-
 	log.Debugf("[%s] Returning response to %#v: %#v", s.cluster.State(), string(query), string(resp))
 	w.Write(resp)
-}
-
-func (s *Server) replicationHandler(w http.ResponseWriter, req *http.Request) {
-	r := &Replicate{}
-	if err := util.JSONDecode(req.Body, r); err != nil {
-		log.Printf("Invalid replication request: %s", err)
-		http.Error(w, err.Error(), http.StatusInternalServerError)
-		return
-	}
-
-	log.Printf("Handling replication request from %v", r.Self)
-
-	_, err := s.execute(r.Query)
-	if err != nil {
-		http.Error(w, err.Error(), http.StatusBadRequest)
-	}
-
-	resp := &ReplicateResponse{
-		s.cluster.self,
-	}
-	b := util.JSONEncode(resp)
-	w.Write(b.Bytes())
+    */
 }
 
 func (s *Server) healthcheckHandler(w http.ResponseWriter, req *http.Request) {
@@ -236,7 +272,7 @@ func (s *Server) healthcheckHandler(w http.ResponseWriter, req *http.Request) {
 }
 
 func (s *Server) execute(query []byte) ([]byte, error) {
-	output, err := s.sql.Execute(s.cluster.State(), string(query))
+	output, err := s.sql.Execute(string(query))
 
 	if err != nil {
 		var msg string

@@ -5,6 +5,7 @@ import (
 	"net"
 	"regexp"
 	"strings"
+    "fmt"
 )
 
 var unix *regexp.Regexp = regexp.MustCompile("^[/a-zA-Z0-9\\.]*$")

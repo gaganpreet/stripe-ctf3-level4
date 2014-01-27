@@ -32,7 +32,9 @@ else
 fi
 
 echo "Fetching sqlcluster dependencies..."
+go get github.com/goraft/raft
 go get -d
+echo "Done fetching..."
 
 echo "Building sqlcluster binary..."
 go build -o sqlcluster
