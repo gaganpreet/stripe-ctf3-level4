@@ -28,7 +28,7 @@ fi
 if [ -z "${CTF_BUILD_ENV}" ]; then
     export GOPATH="$cwd/.build"
 else
-    export GOPATH="$cwd/.build:$GOPATH"
+    export GOPATH="$cwd/.build" #:$GOPATH"
 fi
 echo $GOPATH
 
