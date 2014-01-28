@@ -273,6 +273,7 @@ func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
 // This is the only user-facing function, and accordingly the body is
 // a raw string rather than JSON.
 func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
+    log.Printf("Hello world")
     for {
         log.Printf("Leader is: ", s.raftServer.MemberCount(), s.raftServer.Leader())
         if s.raftServer.MemberCount() < 5 {
