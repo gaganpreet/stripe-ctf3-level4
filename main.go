@@ -75,7 +75,7 @@ OPTIONS:
 		os.Exit(1)
 	}
 
-     raft.SetLogLevel(raft.Trace)
+    // raft.SetLogLevel(raft.Trace)
     raft.RegisterCommand(&command.Command{})
 	log.SetVerbose(verbose)
 

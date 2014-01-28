@@ -77,6 +77,7 @@ func (s *Server) ListenAndServe(leader string) error {
     }
     transporter.Install(s.raftServer, s)
     s.raftServer.Start()
+    s.raftServer.SetElectionTimeout(1 * time.Second)
 
     if leader != "" {
         // Join to leader if specified.
@@ -201,13 +202,16 @@ func (s *Server) forwardRequest(w http.ResponseWriter, req *http.Request) {
 
         log.Printf("Forwarding cs: ", cs)
         buf := new(bytes.Buffer)
-        body, _ := s.client.SafePost(cs, "/sql", req.Body)
+        body, err := s.client.SafePost(cs, "/sql", req.Body)
         if body != nil {
             buf.ReadFrom(body)
             s := buf.String()
             byteArray := []byte(s)
             w.Write(byteArray)
             return
+        }
+        if body == nil || err != nil {
+            http.Error(w, "something went wrong", http.StatusBadRequest)
         }
     }
 }
@@ -218,10 +222,12 @@ func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
     command := &raft.DefaultJoinCommand{}
 
     log.Printf("Received join request, my state is: %s", state)
+    /*
     if state != "leader" {
         s.forwardRequest(w, req)
         return
     }
+    */
 
 
     if err := json.NewDecoder(req.Body).Decode(&command); err != nil {
@@ -235,7 +241,6 @@ func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
-    time.Sleep(5)
     log.Printf("Member count: %d", s.raftServer.MemberCount())
     b := util.JSONEncode("in")
     w.Write(b.Bytes())
@@ -269,7 +274,7 @@ func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
 // a raw string rather than JSON.
 func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
     for {
-        log.Printf("Member count: %d", s.raftServer.MemberCount())
+        log.Printf("Leader is: ", s.raftServer.MemberCount(), s.raftServer.Leader())
         if s.raftServer.MemberCount() < 5 {
             log.Printf("Sleeping: %d", s.raftServer.State())
             time.Sleep(1 * time.Second)
@@ -277,37 +282,64 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
         }
         break
     }
-    log.Printf("Received an sql query")
-    log.Printf("Leader is: ", s.raftServer.MemberCount(), s.raftServer.Leader())
-    log.Printf("Member count: %d %s", s.raftServer.MemberCount(), s.raftServer.Peers()[s.raftServer.Leader()])
+
+    log.Printf("Leader is: %d %s", s.raftServer.MemberCount(), s.raftServer.Leader())
     state := s.raftServer.State()
-    leaderCS := s.raftServer.Peers()[s.raftServer.Leader()]
-    log.Printf("Leader CS is: ", leaderCS)
+    log.Printf("state %s", state)
+    query, _ := ioutil.ReadAll(req.Body)
+    if state == "leader" {
+        log.Printf("Starting query: ", string(query))
+        output_t, _ := s.raftServer.Do(command.NewWriteCommand(string(query)))
+
+        if output_t == nil {
+            http.Error(w, "something went wrong", http.StatusBadRequest)
+            return
+        }
+
+        output := output_t.(*sql.Output)
+        formatted := fmt.Sprintf("SequenceNumber: %d\n%s%s",
+        output.SequenceNumber, output.Stdout, output.Stderr)
+        log.Printf("Received output: ", output)
+
+        w.Write([]byte(formatted))
+        return
+    } else {
+        log.Printf("Forwarding")
+        leader := s.raftServer.Leader()
+        cs, err := transport.Encode(leader + ".sock")
+        body, err := s.client.SafePost(cs, "/sql", bytes.NewReader(query))
+        if err != nil {
+            http.Error(w, err.Error(), http.StatusBadRequest)
+            return
+        } else {
+            r, _ := ioutil.ReadAll(body)
+            log.Printf("Writing ", r)
+            w.Write([]byte(r))
+            return
+        }
+        return
+    }
+    /*else {
+        leader := s.raftServer.Peers()[s.raftServer.Leader()]
+        log.Printf("Trying to forward to %s", leader)
+        http.Error(w, "a", http.StatusBadRequest)
+        return
+    }
+        log.Printf("Leader is: ", s.raftServer.MemberCount(), s.raftServer.Leader())
+        http.Error(w, "a", http.StatusInternalServerError)
+        return
+    log.Printf("Received an sql query")
+    log.Printf("Member count: %d %s", s.raftServer.MemberCount(), s.raftServer.Peers()[s.raftServer.Leader()])
 
     if state != "leader" {
         log.Printf("Forwarded an sql query")
-        s.forwardRequest(w, req)
+    //    s.forwardRequest(w, req)
+        http.Error(w, " went wrong", http.StatusBadRequest)
 		return
     }
 
-    query, _ := ioutil.ReadAll(req.Body)
-    log.Printf("Starting query: ", string(query))
-    output_t, _ := s.raftServer.Do(command.NewWriteCommand(string(query)))
 
-
-    if output_t == nil {
-        http.Error(w, "something went wrong", http.StatusBadRequest)
-        return
-    }
-
-    output := output_t.(*sql.Output)
-    formatted := fmt.Sprintf("SequenceNumber: %d\n%s%s",
-    output.SequenceNumber, output.Stdout, output.Stderr)
-    log.Printf("Received output: ", output)
-
-    w.Write([]byte(formatted))
-
-
+    */
     /*
 	state := s.cluster.State()
 	if state != "primary" {
