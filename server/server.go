@@ -311,6 +311,7 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
             cs, err := transport.Encode(leader + ".sock")
             body, err := s.client.SafePost(cs, "/sql", bytes.NewReader(query))
             if err != nil {
+                time.Sleep(200 * time.Millisecond)
                 continue
             } else {
                 r, _ := ioutil.ReadAll(body)
