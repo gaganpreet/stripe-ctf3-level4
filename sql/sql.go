@@ -7,7 +7,6 @@ import (
 	"stripe-ctf.com/sqlcluster/log"
 	"sync"
 	"syscall"
-//    "io/ioutil"
 )
 
 type SQL struct {
@@ -49,25 +48,27 @@ func (sql *SQL) Execute(command string) (*Output, error) {
 	defer sql.mutex.Unlock()
 
 	defer func() { sql.sequenceNumber += 1 }()
-	if log.Verbose() {
-		log.Printf("[%d] Executing %#v", sql.sequenceNumber, command)
-	}
+    log.Printf("[%d] Executing %s", sql.sequenceNumber, command)
 
 	subprocess := exec.Command("sqlite3", sql.path)
 	subprocess.Stdin = strings.NewReader(command + ";")
 
+    log.Printf("1")
 	var stdout, stderr bytes.Buffer
 	subprocess.Stdout = &stdout
 	subprocess.Stderr = &stderr
+    log.Printf("2")
 
 	if err := subprocess.Start(); err != nil {
 		log.Panic(err)
 	}
 
 	var o, e []byte
+    log.Printf("3")
 
 	if err := subprocess.Wait(); err != nil {
 		exitstatus := getExitstatus(err)
+        log.Printf("Exit status: ", exitstatus)
 		switch true {
 		case exitstatus < 0:
 			log.Panic(err)
@@ -81,12 +82,15 @@ func (sql *SQL) Execute(command string) (*Output, error) {
 		o = stdout.Bytes()
 		e = stderr.Bytes()
 	}
+    log.Printf("<%s>", o)
+    log.Printf("<%s>", e)
 
 	output := &Output{
 		Stdout:         o,
 		Stderr:         e,
 		SequenceNumber: sql.sequenceNumber,
 	}
+    log.Printf("4")
 
 	return output, nil
 }

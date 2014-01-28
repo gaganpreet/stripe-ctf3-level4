@@ -35,7 +35,6 @@ func (s *Client) SafePost(connectionString, path string, reqB io.Reader) (io.Rea
 	url := connectionString + path
 	resp, err := s.client.Post(url, "application/octet-stream", reqB)
 	if err != nil {
-        fmt.Printf("BODY IS: >>>>>>>>>>>>>>>>>>> %#v", err)
 		return nil, err
 	}
 	return handleResp(resp)
@@ -57,7 +56,6 @@ func handleResp(resp *http.Response) (io.Reader, error) {
 		return nil, err
 	}
 
-    fmt.Printf("BODY IS: >>>>>>>>>>>>>>>>>>> %#v", body)
 	if resp.StatusCode != 200 {
 		return nil, &RequestError{
 			StatusCode: resp.StatusCode,

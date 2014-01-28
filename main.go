@@ -2,39 +2,32 @@ package main
 
 import (
 	"flag"
-	"github.com/goraft/raft"
-    "stripe-ctf.com/sqlcluster/log"
-    "stripe-ctf.com/sqlcluster/server"
-    "stripe-ctf.com/sqlcluster/command"
-	"math/rand"
-    "io/ioutil"
+	"fmt"
+	"io/ioutil"
 	"os"
-    "os/signal"
+	"os/signal"
+	"path/filepath"
+	"stripe-ctf.com/sqlcluster/log"
+	"stripe-ctf.com/sqlcluster/server"
+	"stripe-ctf.com/sqlcluster/command"
+    "github.com/goraft/raft"
+	"syscall"
 	"time"
-    "path/filepath"
-    "fmt"
-    "syscall"
 )
 
-var verbose bool
-var trace bool
-var debug bool
-var listen, join, directory string
-
-
 func main() {
-	log.SetFlags(0)
-	flag.BoolVar(&verbose, "v", false, "verbose logging")
-	flag.BoolVar(&trace, "trace", false, "Raft trace debugging")
-	flag.BoolVar(&debug, "debug", false, "Raft debugging")
-    flag.StringVar(&listen, "l", "127.0.0.1:4000", "Socket to listen on (Unix or TCP)")
-    flag.StringVar(&join, "join", "", "Cluster to join")
-    flag.StringVar(&directory, "d", "", "Storage directory")
+	var verbose bool
+	var listen, join, directory string
 
-    dir := filepath.Dir(os.Args[0])
-    base := "./" + filepath.Base(os.Args[0])
-    flag.Usage = func() {
-        fmt.Fprintf(os.Stderr, `Usage: %s [options]
+	flag.BoolVar(&verbose, "v", false, "Enable debug output")
+	flag.StringVar(&listen, "l", "127.0.0.1:4000", "Socket to listen on (Unix or TCP)")
+	flag.StringVar(&join, "join", "", "Cluster to join")
+	flag.StringVar(&directory, "d", "", "Storage directory")
+
+	dir := filepath.Dir(os.Args[0])
+	base := "./" + filepath.Base(os.Args[0])
+	flag.Usage = func() {
+		fmt.Fprintf(os.Stderr, `Usage: %s [options]
 
 SQLCluster is a highly-available SQL store. It accepts commands over
 HTTP, and returns the output of commands together with a
@@ -72,81 +65,64 @@ convient for you to develop using TCP.)
 
 OPTIONS:
 `, os.Args[0], dir, base, base, base)
-        flag.PrintDefaults()
-    }
-
-    flag.Parse()
-
-	if verbose {
-		log.Print("Verbose logging enabled.")
-	}
-//		raft.SetLogLevel(raft.Debug)
-	if trace {
-		raft.SetLogLevel(raft.Trace)
-		log.Print("Raft trace debugging enabled.")
-	} else if debug {
-		raft.SetLogLevel(raft.Debug)
-		log.Print("Raft debugging enabled.")
+		flag.PrintDefaults()
 	}
 
-	rand.Seed(time.Now().UnixNano())
+	flag.Parse()
 
-	// Setup commands.
-	raft.RegisterCommand(&command.WriteCommand{})
-
-	// Set the data directory.
 	if flag.NArg() != 0 {
-        flag.Usage()
-        os.Exit(1)
+		flag.Usage()
+		os.Exit(1)
 	}
 
-    log.SetVerbose(verbose)
+     raft.SetLogLevel(raft.Trace)
+    raft.RegisterCommand(&command.Command{})
+	log.SetVerbose(verbose)
 
-    if directory == "" {
-        var err error
-        directory, err = ioutil.TempDir("/tmp", "node")
-        if err != nil {
-            log.Fatalf("Could not create temporary base directory: %s", err)
-        }
-        defer os.RemoveAll(directory)
+	if directory == "" {
+		var err error
+		directory, err = ioutil.TempDir("/tmp", "node")
+		if err != nil {
+			log.Fatalf("Could not create temporary base directory: %s", err)
+		}
+		defer os.RemoveAll(directory)
 
-        log.Printf("Storing state in tmpdir %s", directory)
-    } else {
-        if err := os.MkdirAll(directory, os.ModeDir|0755); err != nil {
-            log.Fatalf("Error while creating storage directory: %s", err)
-        }
-    }
+		log.Printf("Storing state in tmpdir %s", directory)
+	} else {
+		if err := os.MkdirAll(directory, os.ModeDir|0755); err != nil {
+			log.Fatalf("Error while creating storage directory: %s", err)
+		}
+	}
 
-    log.Printf("Changing directory to %s", directory)
-    if err := os.Chdir(directory); err != nil {
-        log.Fatalf("Error while changing to storage directory: %s", err)
-    }
+	log.Printf("Changing directory to %s", directory)
+	if err := os.Chdir(directory); err != nil {
+		log.Fatalf("Error while changing to storage directory: %s", err)
+	}
 
-    // Make sure we don't leave stranded sqlclusters lying around
-    go func() {
-        for {
-            time.Sleep(2 * time.Second)
-            if os.Getppid() == 1 {
-                log.Fatal("Parent process exited; terminating")
-            }
-        }
-    }()
+	// Make sure we don't leave stranded sqlclusters lying around
+	go func() {
+		for {
+			time.Sleep(2 * time.Second)
+			if os.Getppid() == 1 {
+				log.Fatal("Parent process exited; terminating")
+			}
+		}
+	}()
 
-    // Start the server
-    go func() {
-        s, err := server.New(directory, listen)
-        if err != nil {
-            log.Fatal(err)
-        }
+	// Start the server
+	go func() {
+		s, err := server.New(directory, listen)
+		if err != nil {
+			log.Fatal(err)
+		}
 
-        if err := s.ListenAndServe(join); err != nil {
-            log.Fatal(err)
-        }
-    }()
+		if err := s.ListenAndServe(join); err != nil {
+			log.Fatal(err)
+		}
+	}()
 
-    // Exit cleanly so we can remove the tmpdir
-    sigchan := make(chan os.Signal)
-    signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
-    <-sigchan
-
+	// Exit cleanly so we can remove the tmpdir
+	sigchan := make(chan os.Signal)
+	signal.Notify(sigchan, syscall.SIGINT, syscall.SIGTERM)
+	<-sigchan
 }
