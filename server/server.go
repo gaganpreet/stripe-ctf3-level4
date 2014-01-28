@@ -305,18 +305,19 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
         w.Write([]byte(formatted))
         return
     } else {
-        log.Printf("Forwarding")
-        leader := s.raftServer.Leader()
-        cs, err := transport.Encode(leader + ".sock")
-        body, err := s.client.SafePost(cs, "/sql", bytes.NewReader(query))
-        if err != nil {
-            http.Error(w, err.Error(), http.StatusBadRequest)
-            return
-        } else {
-            r, _ := ioutil.ReadAll(body)
-            log.Printf("Writing ", r)
-            w.Write([]byte(r))
-            return
+        for {
+            log.Printf("Forwarding")
+            leader := s.raftServer.Leader()
+            cs, err := transport.Encode(leader + ".sock")
+            body, err := s.client.SafePost(cs, "/sql", bytes.NewReader(query))
+            if err != nil {
+                continue
+            } else {
+                r, _ := ioutil.ReadAll(body)
+                log.Printf("Writing ", r)
+                w.Write([]byte(r))
+                return
+            }
         }
         return
     }
