@@ -5,12 +5,15 @@ import (
 	"os/exec"
 	"strings"
 	"stripe-ctf.com/sqlcluster/log"
+	"stripe-ctf.com/sqlcluster/util"
 	"sync"
 	"syscall"
+    "fmt"
+    "io/ioutil"
 )
 
 type SQL struct {
-	path           string
+	Path           string
 	sequenceNumber int
 	mutex          sync.Mutex
 }
@@ -23,7 +26,7 @@ type Output struct {
 
 func NewSQL(path string) *SQL {
 	sql := &SQL{
-		path: path,
+		Path: path,
 	}
 	return sql
 }
@@ -42,7 +45,7 @@ func getExitstatus(err error) int {
 	return status.ExitStatus()
 }
 
-func (sql *SQL) Execute(command string) (*Output, error) {
+func (sql *SQL) Execute(command string) (string, error) {
 	// TODO: make sure I can catch non-lock issuez
 	sql.mutex.Lock()
 	defer sql.mutex.Unlock()
@@ -50,7 +53,20 @@ func (sql *SQL) Execute(command string) (*Output, error) {
 	defer func() { sql.sequenceNumber += 1 }()
     log.Printf("[%d] Executing %s", sql.sequenceNumber, command)
 
-	subprocess := exec.Command("sqlite3", sql.path)
+    filename := util.Sha1(command)
+    filename = sql.Path + filename
+
+    log.Printf("filename: ", filename)
+    if util.Exists(filename) == true {
+        contents, _ := ioutil.ReadFile(filename)
+        if len(contents) > 0 && strings.Contains(string(contents), "no such table") == false {
+            log.Printf("returning for %s -> %s", command, string(contents))
+            return string(contents), nil
+        }
+    }
+
+
+	subprocess := exec.Command("sqlite3", sql.Path)
 	subprocess.Stdin = strings.NewReader(command + ";")
 
     log.Printf("1")
@@ -90,7 +106,13 @@ func (sql *SQL) Execute(command string) (*Output, error) {
 		Stderr:         e,
 		SequenceNumber: sql.sequenceNumber,
 	}
+
+    formatted := fmt.Sprintf("SequenceNumber: %d\n%s%s",
+    output.SequenceNumber, output.Stdout, output.Stderr)
+    if util.Exists(filename) == false {
+        ioutil.WriteFile(filename, []byte(formatted), 777)
+    }
     log.Printf("4")
 
-	return output, nil
+	return formatted, nil
 }

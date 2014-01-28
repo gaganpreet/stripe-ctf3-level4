@@ -18,6 +18,7 @@ import (
     "bytes"
     "encoding/json"
     "sync"
+    "strings"
 )
 
 type Server struct {
@@ -288,6 +289,19 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
     state := s.raftServer.State()
     log.Printf("state %s", state)
     query, _ := ioutil.ReadAll(req.Body)
+
+    filename := util.Sha1(string(query))
+    filename = s.sql.Path + filename
+
+    log.Printf("filename: ", filename)
+    if util.Exists(filename) == true {
+        contents, _ := ioutil.ReadFile(filename)
+        if len(contents) > 0 && strings.Contains(string(contents), "no such table") == false {
+            log.Printf("returning for %s -> %s", query, string(contents))
+            w.Write([]byte(contents))
+            return
+        }
+    }
     if state == "leader" {
         log.Printf("Starting query: ", string(query))
         output_t, _ := s.raftServer.Do(command.NewWriteCommand(string(query)))
@@ -297,10 +311,8 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
             return
         }
 
-        output := output_t.(*sql.Output)
-        formatted := fmt.Sprintf("SequenceNumber: %d\n%s%s",
-        output.SequenceNumber, output.Stdout, output.Stderr)
-        log.Printf("Received output: ", output)
+        formatted := output_t.(string)
+        log.Printf("Received output: ", formatted)
 
         w.Write([]byte(formatted))
         return

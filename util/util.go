@@ -8,6 +8,7 @@ import (
 	"os"
 	"strings"
 	"stripe-ctf.com/sqlcluster/log"
+    "crypto/sha1"
 )
 
 func EnsureAbsent(path string) {
@@ -35,4 +36,19 @@ func JSONEncode(s interface{}) *bytes.Buffer {
 
 func JSONDecode(body io.Reader, s interface{}) error {
 	return json.NewDecoder(body).Decode(s)
+}
+
+func Exists(path string) (bool) {
+    _, err := os.Stat(path)
+    if err == nil { return true}
+    if os.IsNotExist(err) { return false }
+    return false
+}
+
+func Sha1(s string) (string) {
+    h := sha1.New()
+    h.Write([]byte(s))
+    bs := h.Sum(nil)
+    res := fmt.Sprintf("%x", bs)
+    return res
 }
