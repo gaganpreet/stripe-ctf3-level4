@@ -70,12 +70,6 @@ func (s *Server) connectionString() string {
 func (s *Server) ListenAndServe(leader string) error {
 	var err error
 
-	// Start Unix transport
-	l, err := transport.Listen(s.listen)
-	if err != nil {
-		log.Fatal(err)
-	}
-
     transporter := raft.NewHTTPTransporter("/raft")
     transporter.Transport.Dial = transport.UnixDialer
     s.raftServer, err = raft.NewServer(s.name, s.path, transporter, nil, s.sql, "")
@@ -120,6 +114,12 @@ func (s *Server) ListenAndServe(leader string) error {
     s.httpServer = &http.Server{
         Handler: s.router,
     }
+
+	// Start Unix transport
+	l, err := transport.Listen(s.listen)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	s.router.HandleFunc("/sql", s.sqlHandler).Methods("POST")
 	//s.router.HandleFunc("/replicate", s.replicationHandler).Methods("POST")
@@ -278,7 +278,7 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
     log.Printf("Hello world")
     for {
         log.Printf("Leader is: ", s.raftServer.MemberCount(), s.raftServer.Leader())
-        if s.raftServer.MemberCount() < 5 {
+        if s.raftServer.Leader() == "" {
             log.Printf("Sleeping: %d", s.raftServer.State())
             time.Sleep(1 * time.Second)
             continue
