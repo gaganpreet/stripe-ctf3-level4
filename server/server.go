@@ -62,7 +62,7 @@ func (s *Server) HandleFunc(pattern string, handler func(http.ResponseWriter, *h
 }
 
 func (s *Server) connectionString() string {
-    cs, _ := transport.Encode(s.path + "/" + s.listen)
+    cs, _ := transport.Encode(s.listen)
     return cs
 }
 
