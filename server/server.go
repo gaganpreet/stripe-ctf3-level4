@@ -70,6 +70,12 @@ func (s *Server) connectionString() string {
 func (s *Server) ListenAndServe(leader string) error {
 	var err error
 
+	// Start Unix transport
+	l, err := transport.Listen(s.listen)
+	if err != nil {
+		log.Fatal(err)
+	}
+
     transporter := raft.NewHTTPTransporter("/raft")
     transporter.Transport.Dial = transport.UnixDialer
     s.raftServer, err = raft.NewServer(s.name, s.path, transporter, nil, s.sql, "")
@@ -120,11 +126,6 @@ func (s *Server) ListenAndServe(leader string) error {
 	//s.router.HandleFunc("/healthcheck", s.healthcheckHandler).Methods("GET")
 	s.router.HandleFunc("/join", s.joinHandler).Methods("POST")
 
-	// Start Unix transport
-	l, err := transport.Listen(s.listen)
-	if err != nil {
-		log.Fatal(err)
-	}
 	return s.httpServer.Serve(l)
 }
 
@@ -153,7 +154,7 @@ func (s *Server) Join(leader string) error {
             time.Sleep(200 * time.Millisecond)
             continue
         }
-        log.Printf("Got this while joining: %v", body)
+        //log.Printf("Got this while joining: %v", body)
         log.Printf("Member count: %d", s.raftServer.MemberCount())
         return nil
     }
@@ -323,11 +324,13 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
             cs, err := transport.Encode(leader + ".sock")
             body, err := s.client.SafePost(cs, "/sql", bytes.NewReader(query))
             if err != nil {
-                time.Sleep(200 * time.Millisecond)
+                http.Error(w, " went wrong", http.StatusBadRequest)
+                time.Sleep(1000 * time.Millisecond)
+                return
                 continue
             } else {
                 r, _ := ioutil.ReadAll(body)
-                log.Printf("Writing ", r)
+            //    log.Printf("Writing ", r)
                 w.Write([]byte(r))
                 return
             }
