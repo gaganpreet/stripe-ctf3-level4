@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"path/filepath"
 	"stripe-ctf.com/sqlcluster/log"
-	"stripe-ctf.com/sqlcluster/sql"
+	"stripe-ctf.com/sqlcluster/minesql"
 	"stripe-ctf.com/sqlcluster/transport"
 	"stripe-ctf.com/sqlcluster/util"
 	"stripe-ctf.com/sqlcluster/command"
@@ -18,7 +18,6 @@ import (
     "bytes"
     "encoding/json"
     "sync"
-    "strings"
 )
 
 type Server struct {
@@ -27,7 +26,7 @@ type Server struct {
 	listen     string
 	router     *mux.Router
 	httpServer *http.Server
-	sql        *sql.SQL
+	sql        *minesql.MineSQL
 	client     *transport.Client
     raftServer  raft.Server
     cs          string
@@ -47,7 +46,7 @@ func New(path, listen string) (*Server, error) {
 	s := &Server{
 		path:    path,
 		listen:  listen,
-		sql:     sql.NewSQL(sqlPath),
+		sql:     minesql.NewSQL(sqlPath),
 		router:  mux.NewRouter(),
 		client:  transport.NewClient(),
         cs:      cs,
@@ -118,6 +117,7 @@ func (s *Server) ListenAndServe(leader string) error {
 
     // Initialize and start HTTP server.
     s.httpServer = &http.Server{
+        Addr: s.listen,
         Handler: s.router,
     }
 
@@ -134,7 +134,6 @@ func (s *Server) ListenAndServe(leader string) error {
 
 // Join an existing cluster
 func (s *Server) Join(leader string) error {
-    time.Sleep(5 * time.Second)
     tried := 0
     for {
         command := &raft.DefaultJoinCommand{
@@ -304,9 +303,17 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
     log.Printf("state %s", state)
     query, _ := ioutil.ReadAll(req.Body)
 
+    /*
     filename := util.Sha1(string(query))
     filename = s.sql.Path + filename
+    */
 
+    cached_val, ok := s.sql.Cache[string(query)]
+    if ok {
+        w.Write([]byte(cached_val))
+        return
+    }
+    /*
     log.Printf("filename: ", filename)
     if util.Exists(filename) == true {
         contents, _ := ioutil.ReadFile(filename)
@@ -316,6 +323,7 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
             return
         }
     }
+    */
     if state == "leader" {
         log.Printf("Starting query: ", string(query))
         output_t, _ := s.raftServer.Do(command.NewWriteCommand(string(query)))

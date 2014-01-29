@@ -3,7 +3,7 @@ package command
 import (
     "fmt"
 	"github.com/goraft/raft"
-	"stripe-ctf.com/sqlcluster/sql"
+	"stripe-ctf.com/sqlcluster/minesql"
 )
 
 // This command writes a value to a key.
@@ -27,7 +27,7 @@ func (c *Command) CommandName() string {
 // Writes a value to a key.
 func (c *Command) Apply(server raft.Server) (interface{}, error) {
     fmt.Printf("Command Apply %#v", c)
-	db := server.Context().(*sql.SQL)
+	db := server.Context().(*minesql.MineSQL)
     output, err := db.Execute(c.Sql)
 	return output, err
 }
