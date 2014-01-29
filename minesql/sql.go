@@ -63,12 +63,12 @@ func (db *MineSQL) Execute(command string) (string, error) {
     /*
     filename := util.Sha1(command)
     filename = db.Path + filename
-    */
 
     cached_val, ok := db.Cache[command]
     if ok {
         return cached_val, nil
     }
+    */
 
     /*
     log.Printf("filename: ", filename)
@@ -80,6 +80,14 @@ func (db *MineSQL) Execute(command string) (string, error) {
         }
     }
     */
+    var (
+ //       container []string
+ //       pointers  []interface{}
+        a string
+        b int
+        c int
+        d string
+    )
 
     formatted := ""
     // fmt.Println("library", command)
@@ -95,18 +103,15 @@ func (db *MineSQL) Execute(command string) (string, error) {
 
         if strings.Contains(query, "SELECT") {
             rows, err := db.sqlH.Query(query)
-            var (
-                container []string
-                pointers  []interface{}
-            )
             if err != nil {
                 panic(err.Error())
             }
 
-            cols, err := rows.Columns()
-            length := len(cols)
+//            length := 4
 
             for rows.Next() {
+                _ = rows.Scan(&a, &b, &c, &d)
+                /*
                 pointers = make([]interface{}, length)
                 container = make([]string, length)
 
@@ -118,7 +123,8 @@ func (db *MineSQL) Execute(command string) (string, error) {
                 if err != nil {
                     panic(err.Error())
                 }
-                formatted += strings.Join(container, "|") + "\n"
+                */
+                formatted += fmt.Sprintf("%s|%d|%d|%s", a, b, c, d) + "\n"
             }
 
         //    cols, _ := rows.Columns()
