@@ -4,6 +4,7 @@ import (
     "fmt"
 	"github.com/goraft/raft"
 	"stripe-ctf.com/sqlcluster/minesql"
+	"stripe-ctf.com/sqlcluster/util"
 )
 
 // This command writes a value to a key.
@@ -15,7 +16,7 @@ type Command struct {
 func NewWriteCommand(sql string) *Command {
     fmt.Printf("Creating new command ", sql)
 	return &Command{
-		Sql: sql,
+		Sql: util.Compress(sql, true),
 	}
 }
 
@@ -28,6 +29,6 @@ func (c *Command) CommandName() string {
 func (c *Command) Apply(server raft.Server) (interface{}, error) {
     fmt.Printf("Command Apply %#v", c)
 	db := server.Context().(*minesql.MineSQL)
-    output, err := db.Execute(c.Sql)
+    output, err := db.Execute(util.Compress(c.Sql, false))
 	return output, err
 }

@@ -52,3 +52,38 @@ func Sha1(s string) (string) {
     res := fmt.Sprintf("%x", bs)
     return res
 }
+
+func Compress(s string, flag bool) (string) {
+    replacements := make(map[string]string)
+
+    replacements["INSERT"] = "!"
+    replacements["CREATE"] = "@"
+    replacements["UPDATE"] = "#"
+    replacements["SELECT"] = "$"
+    replacements["INTO"] = "%"
+    replacements["friendCount"] = "^"
+    replacements["requestCount"] = "&"
+    replacements["favoriteWord"] = "`"
+    replacements["WHERE"] = "~"
+    replacements["SET"] = "{"
+    replacements["name"] = "}"
+    replacements["FROM"] = "_"
+    replacements["ctf3"] = "|"
+    replacements["gdb"] = "["
+    replacements["christian"] = "]"
+    replacements["carl"] = ":"
+    replacements["andy"] = "?"
+    replacements["siddarth"] = "\\"
+
+    result := s
+    for k, v := range replacements {
+        if flag == true {
+            result = strings.Replace(result, k, v, -1)
+        } else {
+            result = strings.Replace(result, v, k, -1)
+        }
+    }
+
+    log.Printf("Compressed: ", result)
+    return result
+}
