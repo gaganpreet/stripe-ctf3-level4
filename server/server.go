@@ -150,7 +150,7 @@ func (s *Server) Join(leader string) error {
         body, err := s.client.SafePost(cs, "/join", &b)
 
         if err != nil || body == nil {
-            log.Printf("Couldn't join cluster %s", err)
+            log.Printf("Couldn't join cluster %s %s", err, body)
             time.Sleep(200 * time.Millisecond)
             continue
         }
@@ -220,6 +220,8 @@ func (s *Server) forwardRequest(w http.ResponseWriter, req *http.Request) {
 
 // Server handlers
 func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
+    s.mutex.Lock()
+    defer s.mutex.Unlock()
     state := s.raftServer.State()
     command := &raft.DefaultJoinCommand{}
 
@@ -298,7 +300,7 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
     if util.Exists(filename) == true {
         contents, _ := ioutil.ReadFile(filename)
         if len(contents) > 0 && strings.Contains(string(contents), "no such table") == false {
-            log.Printf("returning for %s -> %s", query, string(contents))
+            // log.Printf("returning for %s -> %s", query, string(contents))
             w.Write([]byte(contents))
             return
         }
