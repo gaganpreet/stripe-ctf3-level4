@@ -34,6 +34,7 @@ echo $GOPATH
 
 echo "Fetching sqlcluster dependencies..."
 go get github.com/goraft/raft
+go get github.com/mattn/go-sqlite3
 go get -d
 echo "Done fetching..."
 

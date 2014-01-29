@@ -1,7 +1,6 @@
 package minesql
 
 import (
-	"bytes"
 	"os/exec"
 	"strings"
 	"stripe-ctf.com/sqlcluster/log"
@@ -29,7 +28,7 @@ type Output struct {
 }
 
 func NewSQL(path string) *MineSQL {
-    sqlH, err := sql.Open("sqlite3", path + "2")
+    sqlH, err := sql.Open("sqlite3", ":memory:") //path + "2")
     log.Printf("Creating memory database: <<<%v>>> <<<%v>>> <<<%v>>>", err, sqlH, err == nil)
 	sql := &MineSQL{
 		Path: path,
@@ -82,14 +81,13 @@ func (db *MineSQL) Execute(command string) (string, error) {
     }
     */
 
-    /*
+    formatted := ""
     fmt.Println("library", command)
     queries := strings.Split(command, ";")
     for _, query := range queries {
         log.Printf("query mem ", query)
         if strings.Contains(query, "UPDATE") || strings.Contains(query, "INSERT") || strings.Contains(query, "CREATE") {
-            _, err := db.sqlH.Exec(query)
-            log.Printf("UIC ", err)
+            _, _ = db.sqlH.Exec(query)
             continue
         }
 
@@ -98,7 +96,6 @@ func (db *MineSQL) Execute(command string) (string, error) {
         if strings.Contains(query, "SELECT") {
             rows, err := db.sqlH.Query(query)
             var (
-                result  string
                 container []string
                 pointers  []interface{}
             )
@@ -121,7 +118,7 @@ func (db *MineSQL) Execute(command string) (string, error) {
                 if err != nil {
                     panic(err.Error())
                 }
-                result += strings.Join(container, "|")
+                formatted += strings.Join(container, "|") + "\n"
             }
 
         //    cols, _ := rows.Columns()
@@ -145,8 +142,8 @@ func (db *MineSQL) Execute(command string) (string, error) {
         //    }
         }
     }
-    */
 
+    /*
 	subprocess := exec.Command("sqlite3", db.Path)
 	subprocess.Stdin = strings.NewReader(command + ";")
 
@@ -182,9 +179,10 @@ func (db *MineSQL) Execute(command string) (string, error) {
 		SequenceNumber: db.sequenceNumber,
 	}
 
-    formatted := fmt.Sprintf("SequenceNumber: %d\n%s%s",
-    output.SequenceNumber, output.Stdout, output.Stderr)
+    */
 
+    formatted = fmt.Sprintf("SequenceNumber: %d\n%s",
+    db.sequenceNumber, formatted)
     db.Cache[command] = formatted
 
 	return formatted, nil
