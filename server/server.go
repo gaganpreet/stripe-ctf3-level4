@@ -69,6 +69,11 @@ func (s *Server) connectionString() string {
 // Starts the server.
 func (s *Server) ListenAndServe(leader string) error {
 	var err error
+	// Start Unix transport
+	l, err := transport.Listen(s.listen)
+	if err != nil {
+		log.Fatal(err)
+	}
 
     transporter := raft.NewHTTPTransporter("/raft")
     transporter.Transport.Dial = transport.UnixDialer
@@ -116,11 +121,6 @@ func (s *Server) ListenAndServe(leader string) error {
         Handler: s.router,
     }
 
-	// Start Unix transport
-	l, err := transport.Listen(s.listen)
-	if err != nil {
-		log.Fatal(err)
-	}
 
 	s.router.HandleFunc("/sql", s.sqlHandler).Methods("POST")
 	//s.router.HandleFunc("/replicate", s.replicationHandler).Methods("POST")
