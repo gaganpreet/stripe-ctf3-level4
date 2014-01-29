@@ -69,18 +69,15 @@ func (sql *SQL) Execute(command string) (string, error) {
 	subprocess := exec.Command("sqlite3", sql.Path)
 	subprocess.Stdin = strings.NewReader(command + ";")
 
-    log.Printf("1")
 	var stdout, stderr bytes.Buffer
 	subprocess.Stdout = &stdout
 	subprocess.Stderr = &stderr
-    log.Printf("2")
 
 	if err := subprocess.Start(); err != nil {
 		log.Panic(err)
 	}
 
 	var o, e []byte
-    log.Printf("3")
 
 	if err := subprocess.Wait(); err != nil {
 		exitstatus := getExitstatus(err)
@@ -98,9 +95,6 @@ func (sql *SQL) Execute(command string) (string, error) {
 		o = stdout.Bytes()
 		e = stderr.Bytes()
 	}
-    log.Printf("<%s>", o)
-    log.Printf("<%s>", e)
-
 	output := &Output{
 		Stdout:         o,
 		Stderr:         e,
@@ -112,7 +106,6 @@ func (sql *SQL) Execute(command string) (string, error) {
     if util.Exists(filename) == false {
         ioutil.WriteFile(filename, []byte(formatted), 777)
     }
-    log.Printf("4")
 
 	return formatted, nil
 }
