@@ -292,7 +292,7 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
         log.Printf("Leader is: ", s.raftServer.MemberCount(), s.raftServer.Leader())
         if s.raftServer.Leader() == "" {
             log.Printf("Sleeping: %d", s.raftServer.State())
-            time.Sleep(1 * time.Second)
+            time.Sleep(200 * time.Millisecond)
             continue
         }
         break
