@@ -83,7 +83,7 @@ func (s *Server) ListenAndServe(leader string) error {
     transporter.Install(s.raftServer, s)
     s.raftServer.Start()
     s.raftServer.SetElectionTimeout(1 * time.Second)
-    s.raftServer.SetHeartbeatTimeout(time.Millisecond * 300)
+    s.raftServer.SetHeartbeatTimeout(time.Millisecond * 50)
 
     if leader != "" {
         // Join to leader if specified.
@@ -288,14 +288,16 @@ func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
 // a raw string rather than JSON.
 func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
     //log.Printf("Hello world")
-    for {
-        //log.Printf("Leader is: ", s.raftServer.MemberCount(), s.raftServer.Leader())
-        if s.raftServer.Leader() == "" {
-            //log.Printf("Sleeping: %d", s.raftServer.State())
-            time.Sleep(200 * time.Millisecond)
-            continue
+    if s.raftServer.Leader() == "" {
+        for {
+            //log.Printf("Leader is: ", s.raftServer.MemberCount(), s.raftServer.Leader())
+            if s.raftServer.Leader() == "" {
+                //log.Printf("Sleeping: %d", s.raftServer.State())
+                time.Sleep(20 * time.Millisecond)
+                continue
+            }
+            break
         }
-        break
     }
 
     //log.Printf("Leader is: %d %s", s.raftServer.MemberCount(), s.raftServer.Leader())
@@ -308,11 +310,13 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
     filename = s.sql.Path + filename
     */
 
+    /*
     cached_val, ok := s.sql.Cache[string(query)]
     if ok {
         w.Write([]byte(cached_val))
         return
     }
+    */
     /*
     //log.Printf("filename: ", filename)
     if util.Exists(filename) == true {
@@ -346,12 +350,12 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
         }()
 
         for {
-            time.Sleep(10 * time.Millisecond)
             cached_val, ok := s.sql.Cache[string(query)]
             if ok {
                 w.Write([]byte(cached_val))
                 return
             }
+            time.Sleep(1 * time.Millisecond)
         }
         return
     }
