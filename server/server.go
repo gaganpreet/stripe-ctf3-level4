@@ -339,20 +339,17 @@ func (s *Server) sqlHandler(w http.ResponseWriter, req *http.Request) {
         w.Write([]byte(formatted))
         return
     } else {
-        for {
-            log.Printf("Forwarding")
+        go func() {
             leader := s.raftServer.Leader()
-            cs, err := transport.Encode(leader + ".sock")
-            body, err := s.client.SafePost(cs, "/sql", bytes.NewReader(query))
-            if err != nil {
-                http.Error(w, " went wrong", http.StatusBadRequest)
-                time.Sleep(1000 * time.Millisecond)
-                return
-                continue
-            } else {
-                r, _ := ioutil.ReadAll(body)
-            //    log.Printf("Writing ", r)
-                w.Write([]byte(r))
+            cs, _ := transport.Encode(leader + ".sock")
+            _, _ = s.client.SafePost(cs, "/sql", bytes.NewReader(query))
+        }()
+
+        for {
+            time.Sleep(100 * time.Millisecond)
+            cached_val, ok := s.sql.Cache[string(query)]
+            if ok {
+                w.Write([]byte(cached_val))
                 return
             }
         }
