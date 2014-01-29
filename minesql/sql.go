@@ -58,7 +58,7 @@ func (db *MineSQL) Execute(command string) (string, error) {
 	defer db.mutex.Unlock()
 
 	defer func() { db.sequenceNumber += 1 }()
-    log.Printf("[%d] Executing %s", db.sequenceNumber, command)
+    // log.Printf("[%d] Executing %s", db.sequenceNumber, command)
 
     /*
     filename := util.Sha1(command)
@@ -82,10 +82,10 @@ func (db *MineSQL) Execute(command string) (string, error) {
     */
 
     formatted := ""
-    fmt.Println("library", command)
+    // fmt.Println("library", command)
     queries := strings.Split(command, ";")
     for _, query := range queries {
-        log.Printf("query mem ", query)
+    //     log.Printf("query mem ", query)
         if strings.Contains(query, "UPDATE") || strings.Contains(query, "INSERT") || strings.Contains(query, "CREATE") {
             _, _ = db.sqlH.Exec(query)
             continue

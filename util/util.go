@@ -84,6 +84,6 @@ func Compress(s string, flag bool) (string) {
         }
     }
 
-    log.Printf("Compressed: ", result)
+    // log.Printf("Compressed: ", result)
     return result
 }
