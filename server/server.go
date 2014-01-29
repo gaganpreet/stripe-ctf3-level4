@@ -134,6 +134,7 @@ func (s *Server) ListenAndServe(leader string) error {
 
 // Join an existing cluster
 func (s *Server) Join(leader string) error {
+    time.Sleep(5 * time.Second)
     tried := 0
     for {
         command := &raft.DefaultJoinCommand{
