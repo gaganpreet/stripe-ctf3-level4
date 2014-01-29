@@ -134,6 +134,7 @@ func (s *Server) ListenAndServe(leader string) error {
 
 // Join an existing cluster
 func (s *Server) Join(leader string) error {
+    tried := 0
     for {
         command := &raft.DefaultJoinCommand{
             Name: s.raftServer.Name(),
@@ -152,13 +153,18 @@ func (s *Server) Join(leader string) error {
 
         if err != nil || body == nil {
             log.Printf("Couldn't join cluster %s %s", err, body)
+            if tried == 20 {
+                break
+            }
             time.Sleep(200 * time.Millisecond)
             continue
         }
-        //log.Printf("Got this while joining: %v", body)
+        log.Printf("Got this while joining: %v", body)
         log.Printf("Member count: %d", s.raftServer.MemberCount())
         return nil
     }
+    log.Printf("Giving up")
+    return nil
 /*
     resp.Body.Close()
     if err != nil {
@@ -241,11 +247,14 @@ func (s *Server) joinHandler(w http.ResponseWriter, req *http.Request) {
         return
     }
     log.Printf("Received join request from %s with cs %s. My current state is: %s", command.Name, command.ConnectionString, state)
-    if _, err := s.raftServer.Do(command); err != nil {
+    t, err := s.raftServer.Do(command)
+    if err != nil {
 		log.Printf("Tried to add to cluster, but got this: %s", err)
         http.Error(w, err.Error(), http.StatusInternalServerError)
         return
     }
+    log.Printf("While adding to cluster, got this; %s", t)
+
     log.Printf("Member count: %d", s.raftServer.MemberCount())
     b := util.JSONEncode("in")
     w.Write(b.Bytes())
