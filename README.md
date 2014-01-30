@@ -1,3 +1,10 @@
+My solution to the Level 4 of Stripe CTF 3.
+
+This is a completely distributed solution implemented using goraft (although by the end I had hardcoded some stuff like [column count](https://github.com/gaganpreet/stripe-ctf3-level4/blob/master/minesql/sql.go#L60-65) and [strings for compression](https://github.com/gaganpreet/stripe-ctf3-level4/blob/master/util/util.go#L56-85))
+
+Best score: 2723
+Rank: 25
+
 # SQLCluster
 
 SQLCluster makes your SQLite highly-available.
